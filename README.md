@@ -1,4 +1,4 @@
-opencl-
+openclpp
 =======
 
 OpenCL C++ Wrapper classes header - Fluent style (http://en.wikipedia.org/wiki/Fluent_interface)
