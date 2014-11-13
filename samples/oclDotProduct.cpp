@@ -18,18 +18,9 @@
     #include <windows.h>
 #endif
 
-#define CONFIG_USE_DOUBLE
-#ifdef CONFIG_USE_DOUBLE
+// Comment this if double support is not available
 #define DOUBLE_SUPPORT_AVAILABLE
-#if defined(cl_khr_fp64)  // Khronos extension available?
-#pragma OPENCL EXTENSION cl_khr_fp64 : enable
-#elif defined(cl_amd_fp64)  // AMD extension available?
-#pragma OPENCL EXTENSION cl_amd_fp64 : enable
-#endif
-#endif // CONFIG_USE_DOUBLE
-
 #if defined(DOUBLE_SUPPORT_AVAILABLE)
-
 // double
 typedef cl_double real_t;
 typedef cl_double2 real2_t;
@@ -38,9 +29,7 @@ typedef cl_double4 real4_t;
 typedef cl_double8 real8_t;
 typedef cl_double16 real16_t;
 #define PI 3.14159265358979323846
-
 #else
-
 // float
 typedef cl_float real_t;
 typedef cl_float2 real2_t;
@@ -49,7 +38,6 @@ typedef cl_float4 real4_t;
 typedef cl_float8 real8_t;
 typedef cl_float16 real16_t;
 #define PI 3.14159265359f
-
 #endif
 
 // Name of the file with the source code for the computation kernel
@@ -176,6 +164,10 @@ int main(int argc, char **argv)
     gp_argc = &argc;
     gp_argv = &argv;
 
+#if defined(DOUBLE_SUPPORT_AVAILABLE)
+	printf("Running in double mode...\n");
+#endif
+
     // Get the NVIDIA platform
 	const CLPlatform *platforms = CLPlatform::getAllPlatforms();
 	const CLPlatform *nvidiaPlatformP = NULL;
@@ -239,12 +231,15 @@ int main(int argc, char **argv)
     cSourceCL = oclLoadProgSource(cSourceFile, "", &szKernelLength);
 
     // Build the program with 'mad' Optimization option
-    #ifdef MAC
-        char* flags = "-cl-fast-relaxed-math -DMAC";
-    #else
-        char* flags = "-cl-fast-relaxed-math";
-		flags = "-D CONFIG_USE_DOUBLE";
-    #endif
+	char *flags = NULL;
+#ifdef MAC
+    flags = "-cl-fast-relaxed-math -DMAC";
+#else
+    flags = "-cl-fast-relaxed-math";
+#endif
+#if defined(DOUBLE_SUPPORT_AVAILABLE)
+	flags = "-D CONFIG_USE_DOUBLE";
+#endif
 
 	cpProgramP = (new CLProgram(cxGPUContextP, 1, (const char **)&cSourceCL, &szKernelLength))->build(flags);
 
