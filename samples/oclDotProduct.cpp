@@ -18,6 +18,40 @@
     #include <windows.h>
 #endif
 
+#define CONFIG_USE_DOUBLE
+#ifdef CONFIG_USE_DOUBLE
+#define DOUBLE_SUPPORT_AVAILABLE
+#if defined(cl_khr_fp64)  // Khronos extension available?
+#pragma OPENCL EXTENSION cl_khr_fp64 : enable
+#elif defined(cl_amd_fp64)  // AMD extension available?
+#pragma OPENCL EXTENSION cl_amd_fp64 : enable
+#endif
+#endif // CONFIG_USE_DOUBLE
+
+#if defined(DOUBLE_SUPPORT_AVAILABLE)
+
+// double
+typedef cl_double real_t;
+typedef cl_double2 real2_t;
+typedef cl_double3 real3_t;
+typedef cl_double4 real4_t;
+typedef cl_double8 real8_t;
+typedef cl_double16 real16_t;
+#define PI 3.14159265358979323846
+
+#else
+
+// float
+typedef cl_float real_t;
+typedef cl_float2 real2_t;
+typedef cl_float3 real3_t;
+typedef cl_float4 real4_t;
+typedef cl_float8 real8_t;
+typedef cl_float16 real16_t;
+#define PI 3.14159265359f
+
+#endif
+
 // Name of the file with the source code for the computation kernel
 // *********************************************************************
 const char* cSourceFile = "DotProduct.cl";
@@ -50,7 +84,7 @@ bool bNoPrompt = false;
 
 // Forward Declarations
 // *********************************************************************
-void DotProductHost(const float* pfData1, const float* pfData2, float* pfResult, int iNumElements);
+void DotProductHost(const real_t* pfData1, const real_t* pfData2, real_t* pfResult, int iNumElements);
 void Cleanup (int iExitCode);
 void (*pCleanup)(int) = &Cleanup;
 
@@ -126,10 +160,10 @@ size_t shrRoundUp(int group_size, int global_size)
     }
 }
 
-void shrFillArray(float* pfData, int iSize)
+void shrFillArray(real_t* pfData, int iSize)
 {
     int i; 
-    const float fScale = 1.0f / (float)RAND_MAX;
+    const real_t fScale = 1.0f / (real_t)RAND_MAX;
     for (i = 0; i < iSize; ++i) 
     {
         pfData[i] = fScale * rand();
@@ -184,12 +218,12 @@ int main(int argc, char **argv)
 	}
     szGlobalWorkSize = shrRoundUp((int)szLocalWorkSize, iNumElements);  // rounded up to the nearest multiple of the LocalWorkSize
     // Allocate and initialize host arrays
-    srcA = (void *)malloc(sizeof(cl_float4) * szGlobalWorkSize);
-    srcB = (void *)malloc(sizeof(cl_float4) * szGlobalWorkSize);
-    dst = (void *)malloc(sizeof(cl_float) * szGlobalWorkSize);
-    Golden = (void *)malloc(sizeof(cl_float) * iNumElements);
-    shrFillArray((float*)srcA, 4 * iNumElements);
-    shrFillArray((float*)srcB, 4 * iNumElements);
+    srcA = (void *)malloc(sizeof(real4_t) * szGlobalWorkSize);
+    srcB = (void *)malloc(sizeof(real4_t) * szGlobalWorkSize);
+    dst = (void *)malloc(sizeof(real_t) * szGlobalWorkSize);
+    Golden = (void *)malloc(sizeof(real_t) * iNumElements);
+    shrFillArray((real_t*)srcA, 4 * iNumElements);
+    shrFillArray((real_t*)srcB, 4 * iNumElements);
 
 	cxGPUContextP = new CLContext(targetDeviceP, 1);
 
@@ -197,9 +231,9 @@ int main(int argc, char **argv)
 	cqCommandQueueP = new CLCommandQueue(cxGPUContextP);
 
     // Allocate the OpenCL buffer memory objects for source and result on the device GMEM
-    cmDevSrcAP = new CLReadOnlyMem(cxGPUContextP, sizeof(cl_float)*szGlobalWorkSize*4);
-    cmDevSrcBP = new CLReadOnlyMem(cxGPUContextP, sizeof(cl_float)*szGlobalWorkSize*4);
-    cmDevDstP = new CLWriteOnlyMem(cxGPUContextP, sizeof(cl_float)*szGlobalWorkSize);
+    cmDevSrcAP = new CLReadOnlyMem(cxGPUContextP, sizeof(real_t)*szGlobalWorkSize*4);
+    cmDevSrcBP = new CLReadOnlyMem(cxGPUContextP, sizeof(real_t)*szGlobalWorkSize*4);
+    cmDevDstP = new CLWriteOnlyMem(cxGPUContextP, sizeof(real_t)*szGlobalWorkSize);
 
     // Read the OpenCL kernel in from source file
     cSourceCL = oclLoadProgSource(cSourceFile, "", &szKernelLength);
@@ -209,9 +243,10 @@ int main(int argc, char **argv)
         char* flags = "-cl-fast-relaxed-math -DMAC";
     #else
         char* flags = "-cl-fast-relaxed-math";
+		flags = "-D CONFIG_USE_DOUBLE";
     #endif
 
-	cpProgramP = (new CLProgram(cxGPUContextP, 1, (const char **)&cSourceCL, &szKernelLength))->build();
+	cpProgramP = (new CLProgram(cxGPUContextP, 1, (const char **)&cSourceCL, &szKernelLength))->build(flags);
 
     // Create the kernel
     ckKernelP = (new CLKernel(cpProgramP, "DotProduct"))
@@ -227,10 +262,10 @@ int main(int argc, char **argv)
     // Launch kernel
 	SYSTEMTIME t1_g, t2_g;
 	GetSystemTime(&t1_g);
-    cqCommandQueueP->enqueueWriteBuffer(cmDevSrcAP, CL_FALSE, 0, sizeof(cl_float) * szGlobalWorkSize * 4, srcA)
-				   ->enqueueWriteBuffer(cmDevSrcBP, CL_FALSE, 0, sizeof(cl_float) * szGlobalWorkSize * 4, srcB)
+    cqCommandQueueP->enqueueWriteBuffer(cmDevSrcAP, CL_FALSE, 0, sizeof(real_t) * szGlobalWorkSize * 4, srcA)
+				   ->enqueueWriteBuffer(cmDevSrcBP, CL_FALSE, 0, sizeof(real_t) * szGlobalWorkSize * 4, srcB)
 				   ->enqueueNDRangeKernel(ckKernelP, 1, NULL, &szGlobalWorkSize, &szLocalWorkSize)
-				   ->enqueueReadBuffer(cmDevDstP, CL_TRUE, 0, sizeof(cl_float) * szGlobalWorkSize, dst)
+				   ->enqueueReadBuffer(cmDevDstP, CL_TRUE, 0, sizeof(real_t) * szGlobalWorkSize, dst)
 				   ;
 
 	GetSystemTime(&t2_g);
@@ -239,7 +274,7 @@ int main(int argc, char **argv)
     // Compute and compare results for golden-host and report errors and pass/fail
 	SYSTEMTIME t1, t2;
 	GetSystemTime(&t1);
-    DotProductHost ((const float*)srcA, (const float*)srcB, (float*)Golden, iNumElements);
+    DotProductHost ((const real_t*)srcA, (const real_t*)srcB, (real_t*)Golden, iNumElements);
 	GetSystemTime(&t2);
 	printf("host %d secs, %d mili\n", t2.wSecond-t1.wSecond, t2.wMilliseconds-t1.wMilliseconds);
 
@@ -249,7 +284,7 @@ int main(int argc, char **argv)
 
 // "Golden" Host processing dot product function for comparison purposes
 // *********************************************************************
-void DotProductHost(const float* pfData1, const float* pfData2, float* pfResult, int iNumElements)
+void DotProductHost(const real_t* pfData1, const real_t* pfData2, real_t* pfResult, int iNumElements)
 {
     int i, j, k;
     for (i = 0, j = 0; i < iNumElements; i++) 
